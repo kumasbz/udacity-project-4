@@ -1,0 +1,50 @@
+name: build-test-deploy_environments
+on:
+  workflow_dispatch:
+  pull_requests:
+    branches: 
+      - main
+    paths:
+      - starter/frontend/**
+  
+env:
+  # Set Node.js Version
+  NODE_VERSION: '16.9.0'
+
+# Jobs defined in the workflow
+jobs:
+  lintJob:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Node.js 
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{env.NODE_VERSION}}
+      - name: Install
+        run: cd starter/frontend && npm ci
+      - name: Run Linter
+        run: cd starter/frontend && npm run lint
+
+  testJob:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Node.js 
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{env.NODE_VERSION}}
+      - name: Install
+        run: cd starter/frontend && npm ci
+      - name: Run Tests
+        run: cd starter/frontend && npm test
+
+  buildJob:
+    needs: [lintJob, testJob]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build
+        run: cd starter/frontend && npm run build
+      
