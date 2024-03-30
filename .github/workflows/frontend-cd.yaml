@@ -49,20 +49,22 @@ jobs:
       - name: Run Tests
         run: cd starter/frontend && npm test
 
-  buildAndPushJob:
+  buildPushDeployJob:
     runs-on: ubuntu-latest
     needs: [lintJob, testJob]
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
         with:
           registry: ${{env.FRONTEND_ECR}}
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: us-east-1
       
       - name: Build and push using docker
         run: |
@@ -70,21 +72,10 @@ jobs:
           docker build --build-arg REACT_APP_MOVIE_API_URL=${{env.REACT_APP_MOVIE_API_URL}} -t ${{env.FRONTEND_ECR}}:${{ github.sha }} .
           docker push ${{env.FRONTEND_ECR}}:${{ github.sha }}
 
-  deployJob:
-    runs-on: ubuntu-latest
-    needs:
-      - buildAndPushJob
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
       - name: Deploy to EKS
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: us-east-1
         run: |
           cd starter/frontend/k8s
           aws eks update-kubeconfig --region us-east-1 --name cluster
-          kubectl apply -f deployment.yaml
-          kubectl apply -f service.yaml
+          kustomize edit set image backend=${{env.FRONTEND_ECR}}:${{ github.sha }}
+          kustomize build | kubectl apply -f -
         
