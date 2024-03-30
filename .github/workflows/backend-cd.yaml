@@ -65,7 +65,7 @@ jobs:
       - name: Build and push app using docker
         run: |
           cd starter/backend
-          docker build -t ${{env.BACKEND}}:${{ github.sha }} .
+          docker build -t ${{env.BACKEND_ECR}}:${{ github.sha }} .
           docker push ${{env.BACKEND_ECR}}:${{ github.sha }}
 
   deployJob:
