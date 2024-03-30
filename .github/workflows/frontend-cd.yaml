@@ -1,0 +1,95 @@
+name: frontend-cd-workflow
+on:
+  workflow_dispatch:
+  push:
+    branches: 
+      - main
+    paths:
+      - 'starter/frontend/**'
+  
+env:
+  # Set Node.js Version
+  NODE_VERSION: '16.9.0'
+  # ECR Repo URL
+  FRONTEND_ECR: '032174433865.dkr.ecr.us-east-1.amazonaws.com/frontend'
+  # REACT_APP_MOVIE_API_URL
+  REACT_APP_MOVIE_API_URL: 'http://backend:5000'
+
+# Jobs defined in the workflow
+jobs:
+  lintJob:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Node.js 
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{env.NODE_VERSION}}
+          cache: 'npm'
+          cache-dependency-path: 'starter/frontend/package-lock.json'
+      - name: Install
+        run: cd starter/frontend && npm ci
+      - name: Run Linter
+        run: cd starter/frontend && npm run lint
+
+  testJob:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Node.js 
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{env.NODE_VERSION}}
+          cache: 'npm'
+          cache-dependency-path: 'starter/frontend/package-lock.json'
+      - name: Install
+        run: cd starter/frontend && npm ci
+      - name: Run Tests
+        run: cd starter/frontend && npm test
+
+  buildJob:
+    needs: [lintJob, testJob]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Build using docker
+        run: |
+          cd starter/frontend
+          docker build --build-arg REACT_APP_MOVIE_API_URL=${{REACT_APP_MOVIE_API_URL}} -t ${{env.FRONTEND_ECR}}:${{ github.sha }} .
+      
+
+  ecrLoginJob:
+    runs-on: ubuntu-latest
+    needs: buildJob
+    steps:
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry: ${{env.FRONTEND_ECR}}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+
+  ecrPushJob:
+    runs-on: ubuntu-latest
+    needs: ecrLoginJob
+    steps:
+      - name: Push Docker Image to ECR
+        run: docker push ${{env.FRONTEND_ECR}}:${{ github.sha }}
+
+  deployJob:
+    runs-on: ubuntu-latest
+    needs:
+      - ecrPushJob
+    steps:
+      - name: Deploy to EKS
+        working-directory: starter/frontend/k8s
+        run: |
+          aws eks update-kubeconfig --region us-east-1 --name cluster
+          kubectl apply -f deployment.yaml
+          kubectl apply -f service.yaml
+        
