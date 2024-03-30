@@ -51,6 +51,8 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{env.NODE_VERSION}}
+      - name: Install
+        run: cd starter/frontend && npm ci
       - name: Build
         run: cd starter/frontend && npm run build
       
