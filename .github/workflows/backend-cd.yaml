@@ -1,0 +1,88 @@
+name: backend-cd-workflow
+on:
+  workflow_dispatch:
+  push:
+    branches: 
+      - main
+    paths:
+      - 'starter/backend/**'
+  
+env:
+  # Set Python Version
+  PYTHON_VERSION: '3.10'
+  # ECR Repo URL
+  BACKEND_ECR: '032174433865.dkr.ecr.us-east-1.amazonaws.com/backend'
+
+# Jobs defined in the workflow
+jobs:
+  lintJob:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{env.PYTHON_VERSION}}
+      - name: Install pipenv
+        run: pip install pipenv
+      - name: Install dependencies
+        run: cd starter/backend && pipenv install -d
+      - name: Run Lint
+        run: cd starter/backend && pipenv run lint
+
+
+  testJob:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{env.PYTHON_VERSION}}
+      - name: Install pipenv
+        run: pip install pipenv
+      - name: Install dependencies
+        run: cd starter/backend && pipenv install -d
+      - name: Run Tests
+        run: cd starter/backend && pipenv run test
+
+  buildAndPushJob:
+    needs: [lintJob, testJob]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry: ${{env.BACKEND_ECR}}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+      - name: Build and push app using docker
+        run: |
+          cd starter/backend
+          docker build -t ${{env.BACKEND}}:${{ github.sha }} .
+          docker push ${{env.BACKEND_ECR}}:${{ github.sha }}
+
+  deployJob:
+    runs-on: ubuntu-latest
+    needs:
+      - buildAndPushJob
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Deploy to EKS
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+        run: |
+          cd starter/backend/k8s
+          aws eks update-kubeconfig --region us-east-1 --name cluster
+          kubectl apply -f deployment.yaml
+          kubectl apply -f service.yaml
+      
