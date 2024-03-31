@@ -76,6 +76,6 @@ jobs:
         run: |
           cd starter/frontend/k8s
           aws eks update-kubeconfig --region us-east-1 --name cluster
-          kustomize edit set image backend=${{env.FRONTEND_ECR}}:${{ github.sha }}
+          kustomize edit set image frontend=${{env.FRONTEND_ECR}}:${{ github.sha }}
           kustomize build | kubectl apply -f -
         
